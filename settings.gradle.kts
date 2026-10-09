@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MoneyRecognize"
+rootProject.name = "webdavAccount"
 include(":app")
