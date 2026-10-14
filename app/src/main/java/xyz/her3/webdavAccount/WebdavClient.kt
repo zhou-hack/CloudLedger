@@ -64,13 +64,53 @@ class WebdavClient(baseUrl: String, user: String, pass: String) {
      */
     fun appendExpense(path: String, dateToken: String, line: String) {
         val current = get(path)
+        put(path, buildAppend(current, dateToken, line))
+    }
+
+    /** 编辑一行:日期没变就原位替换;日期变了删除旧行、按约定追加到新日期 */
+    fun applyEdit(path: String, oldLine: String, newLine: String, newDateToken: String) {
+        val current = get(path)
+        val lines = current.lines().toMutableList()
+        val idx = lines.indexOfFirst { it == oldLine }
+        if (idx < 0) throw Exception("原记录不存在(可能已被改动)")
+
+        val oldDateKey = Entry.normalizeDateKey(oldLine.substringBefore(" "))
+        if (oldDateKey == newDateToken) {
+            lines[idx] = newLine
+            put(path, lines.joinToString("\n"))
+        } else {
+            lines.removeAt(idx)
+            put(path, buildAppend(collapseBlankRuns(lines).joinToString("\n"), newDateToken, newLine))
+        }
+    }
+
+    /** 删除一行(第一条精确匹配),并清理留下的连续空行 */
+    fun deleteLine(path: String, line: String) {
+        val current = get(path)
+        val lines = current.lines().toMutableList()
+        val idx = lines.indexOfFirst { it == line }
+        if (idx < 0) throw Exception("原记录不存在(可能已被改动)")
+        lines.removeAt(idx)
+        put(path, collapseBlankRuns(lines).joinToString("\n"))
+    }
+
+    private fun buildAppend(current: String, dateToken: String, line: String): String {
         val lastEntry = current.lines()
             .lastOrNull { it.isNotBlank() && !it.trimStart().startsWith("#") }
         val sameDay = lastEntry?.startsWith(dateToken) == true
-
         val sb = StringBuilder(current.trimEnd('\n')).append('\n')
         if (lastEntry != null && !sameDay) sb.append('\n')
         sb.append(line).append('\n')
-        put(path, sb.toString())
+        return sb.toString()
+    }
+
+    /** 连续空行压成一个(删行后可能留下) */
+    private fun collapseBlankRuns(lines: List<String>): List<String> {
+        val out = mutableListOf<String>()
+        for (l in lines) {
+            if (l.isBlank() && out.lastOrNull()?.isBlank() == true) continue
+            out.add(l)
+        }
+        return out
     }
 }

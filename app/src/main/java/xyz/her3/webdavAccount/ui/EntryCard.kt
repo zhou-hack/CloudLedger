@@ -1,5 +1,7 @@
 package xyz.her3.webdavAccount.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,13 +21,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import xyz.her3.webdavAccount.Entry
 
-/** 流水卡片:时间 - 备注 - 金额;收入金额用 tertiary 高亮 */
+/** 流水卡片:时间 - 备注 - 金额;收入金额用 tertiary 高亮;长按弹出编辑/删除 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun EntryCard(entry: Entry, modifier: Modifier = Modifier) {
+fun EntryCard(
+    entry: Entry,
+    modifier: Modifier = Modifier,
+    onLongClick: () -> Unit = {},
+) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .combinedClickable(onClick = {}, onLongClick = onLongClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -46,6 +54,13 @@ fun EntryCard(entry: Entry, modifier: Modifier = Modifier) {
                         entry.dateLabel,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (entry.pending) {
+                    Text(
+                        "待同步",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
             }

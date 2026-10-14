@@ -11,6 +11,7 @@ data class Entry(
     val income: Boolean,
     val amountText: String, // "¥14" / "+¥200" / "20 USD"
     val amountValue: Double?, // 数值金额(解析失败为 null)
+    val pending: Boolean = false, // 本地待同步(离线暂存)
 ) {
     companion object {
         // 日期 [时间] 详情 [+]货币金额;货币可省略(默认CNY)
@@ -18,7 +19,7 @@ data class Entry(
             Regex("""^(\S+)\s+(?:(\d{1,2}:\d{2})\s+)?(.+?)\s+(\+?)([a-zA-Z]{0,3})([\d.]+)$""")
 
         /** 各种历史日期格式统一成 yyyy-MM-dd */
-        private fun normalizeDate(token: String): String = when {
+        fun normalizeDateKey(token: String): String = when {
             token.matches(Regex("""\d{6}""")) ->
                 "20${token.substring(0, 2)}-${token.substring(2, 4)}-${token.substring(4, 6)}"
             token.matches(Regex("""\d{2}-\d{2}-\d{2}""")) -> "20$token"
@@ -43,7 +44,7 @@ data class Entry(
             return Entry(
                 raw = line,
                 dateToken = token,
-                dateKey = normalizeDate(token),
+                dateKey = normalizeDateKey(token),
                 time = time.ifBlank { null },
                 dateLabel = dateLabel,
                 detail = detail,

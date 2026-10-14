@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import xyz.her3.webdavAccount.Entry
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -51,30 +52,51 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 记一笔:详情 + 金额必填;日期默认今天、支出/收入默认支出(均可改)。
- * onSave(line, dateToken, onDone) 由调用方在子线程执行写入。
+ * 记一笔/编辑记录:详情 + 金额必填;日期默认今天、支出/收入默认支出(均可改)。
+ * initial != null 时为编辑模式,表单预填原记录。
+ * onSave(line, dateToken, onDone) 由调用方在子线程执行写入;
+ * onDone 的 Boolean 表示是否已同步到服务器(false = 本地暂存)。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddExpenseSheet(
+    initial: Entry? = null,
     onDismiss: () -> Unit,
-    onSaved: () -> Unit,
-    onSave: (line: String, dateToken: String, onDone: (Result<Unit>) -> Unit) -> Unit,
+    onSaved: (synced: Boolean) -> Unit,
+    onSave: (line: String, dateToken: String, onDone: (Result<Boolean>) -> Unit) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var isExpense by remember { mutableStateOf(true) }
-    var detail by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var selectedMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var isExpense by remember { mutableStateOf(initial?.income?.not() ?: true) }
+    var detail by remember { mutableStateOf(initial?.detail ?: "") }
+    var amount by remember {
+        mutableStateOf(
+            initial?.amountValue?.let {
+                BigDecimal.valueOf(it).stripTrailingZeros().toPlainString()
+            } ?: ""
+        )
+    }
+    var selectedMillis by remember {
+        mutableLongStateOf(
+            initial?.let {
+                runCatching {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(it.dateKey)!!.time
+                }.getOrNull()
+            } ?: System.currentTimeMillis()
+        )
+    }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
 
     val now = remember { Calendar.getInstance() }
-    var timeH by remember { mutableIntStateOf(now.get(Calendar.HOUR_OF_DAY)) }
-    var timeM by remember { mutableIntStateOf(now.get(Calendar.MINUTE)) }
+    var timeH by remember {
+        mutableIntStateOf(initial?.time?.substringBefore(":")?.toIntOrNull() ?: now.get(Calendar.HOUR_OF_DAY))
+    }
+    var timeM by remember {
+        mutableIntStateOf(initial?.time?.substringAfter(":")?.toIntOrNull() ?: now.get(Calendar.MINUTE))
+    }
 
     val displayFmt = remember { SimpleDateFormat("yyyy-MM-dd E", Locale.CHINA) }
     val tokenFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
@@ -90,7 +112,11 @@ fun AddExpenseSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("记一笔", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                if (initial == null) "记一笔" else "编辑记录",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
 
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 SegmentedButton(
@@ -169,8 +195,8 @@ fun AddExpenseSheet(
                             onSave(line, token) { result ->
                                 saving = false
                                 result
-                                    .onSuccess {
-                                        onSaved()
+                                    .onSuccess { synced ->
+                                        onSaved(synced)
                                         onDismiss()
                                     }
                                     .onFailure { saveError = "保存失败:${it.message}" }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +40,7 @@ import xyz.her3.webdavAccount.ui.AppTheme
 import xyz.her3.webdavAccount.ui.EntryCard
 import xyz.her3.webdavAccount.ui.FloatingNavBar
 import xyz.her3.webdavAccount.ui.HomeHeader
+import xyz.her3.webdavAccount.ui.MonthSheet
 import xyz.her3.webdavAccount.ui.SettingsScreen
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
@@ -61,20 +63,46 @@ class MainActivity : ComponentActivity() {
                         SettingsStore.save(this, new)
                         config = new
                     },
-                    onLoadRecent = { path, limit, onDone ->
+                    onLoadRecent = { path, _, onDone ->
                         Thread {
-                            runCatching {
+                            // 先尽力补传离线暂存,再拉远端,最后把仍未同步的拼到最前
+                            Outbox.flush(this, webdav, path)
+                            val remote = runCatching {
                                 webdav.get(path).lines()
                                     .filter { it.isNotBlank() && !it.trimStart().startsWith("#") }
-                                    .takeLast(limit)
+                                    .takeLast(1000)
                                     .asReversed()
                                     .map { Entry.parse(it) }
-                            }.let(onDone)
+                            }
+                            val pending = Outbox.pending(this)
+                                .map { Entry.parse(it).copy(pending = true) }
+                            when {
+                                remote.isSuccess -> onDone(Result.success(pending + remote.getOrThrow()))
+                                pending.isNotEmpty() -> onDone(Result.success(pending))
+                                else -> onDone(Result.failure(remote.exceptionOrNull()!!))
+                            }
                         }.start()
                     },
                     onSave = { path, line, token, onDone ->
                         Thread {
                             runCatching { webdav.appendExpense(path, token, line) }
+                                .onSuccess { onDone(Result.success(true)) }
+                                .onFailure {
+                                    // 网络失败:暂存本地队列,联网后自动补传
+                                    Outbox.add(this, line)
+                                    onDone(Result.success(false))
+                                }
+                        }.start()
+                    },
+                    onReplace = { path, oldRaw, newLine, token, onDone ->
+                        Thread {
+                            runCatching { webdav.applyEdit(path, oldRaw, newLine, token) }
+                                .let(onDone)
+                        }.start()
+                    },
+                    onDelete = { path, raw, onDone ->
+                        Thread {
+                            runCatching { webdav.deleteLine(path, raw) }
                                 .let(onDone)
                         }.start()
                     },
@@ -102,7 +130,9 @@ fun MainScreen(
     config: WebdavConfig,
     onConfigSave: (WebdavConfig) -> Unit,
     onLoadRecent: (path: String, limit: Int, onDone: (Result<List<Entry>>) -> Unit) -> Unit,
-    onSave: (path: String, line: String, dateToken: String, onDone: (Result<Unit>) -> Unit) -> Unit,
+    onSave: (path: String, line: String, dateToken: String, onDone: (Result<Boolean>) -> Unit) -> Unit,
+    onReplace: (path: String, oldRaw: String, newLine: String, dateToken: String, onDone: (Result<Unit>) -> Unit) -> Unit,
+    onDelete: (path: String, raw: String, onDone: (Result<Unit>) -> Unit) -> Unit,
 ) {
     var entries by remember { mutableStateOf<List<Entry>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -115,7 +145,11 @@ fun MainScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var hideAmount by remember { mutableStateOf(false) }
     var showFilterPicker by remember { mutableStateOf(false) }
+    var showMonthSheet by remember { mutableStateOf(false) }
+    var actionEntry by remember { mutableStateOf<Entry?>(null) }
+    var editingEntry by remember { mutableStateOf<Entry?>(null) }
     val listState = rememberLazyListState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val todayToken = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) }
     // null = 全部;默认只显示当日
@@ -200,6 +234,7 @@ fun MainScreen(
                     },
                     onRefresh = { refreshTick++ },
                     onSettings = { selectedTab = 1 },
+                    onMonthOverview = { showMonthSheet = true },
                 )
             } else {
                 AppHeader(label = "设置", headline = "WebDAV 同步")
@@ -257,7 +292,11 @@ fun MainScreen(
                     ),
                 ) {
                     items(shownEntries) { entry ->
-                        EntryCard(entry, modifier = Modifier.animateItem())
+                        EntryCard(
+                            entry,
+                            modifier = Modifier.animateItem(),
+                            onLongClick = { actionEntry = entry },
+                        )
                     }
                 }
             }
@@ -278,15 +317,73 @@ fun MainScreen(
         }
     }
 
-    if (showSheet) {
+    if (showSheet || editingEntry != null) {
+        val editing = editingEntry
         AddExpenseSheet(
-            onDismiss = { showSheet = false },
-            onSaved = {
-                refreshTick++
-                snackbarMessage = "已保存"
+            initial = editing,
+            onDismiss = {
+                showSheet = false
+                editingEntry = null
             },
-            onSave = { line, token, done -> onSave(config.path, line, token, done) },
+            onSaved = { synced ->
+                refreshTick++
+                snackbarMessage = when {
+                    editing != null -> "已更新"
+                    synced -> "已保存"
+                    else -> "已暂存,联网后自动同步"
+                }
+            },
+            onSave = { line, token, done ->
+                if (editing != null) {
+                    onReplace(config.path, editing.raw, line, token) { r ->
+                        r.onSuccess { done(Result.success(true)) }
+                            .onFailure { done(Result.failure(it)) }
+                    }
+                } else {
+                    onSave(config.path, line, token, done)
+                }
+            },
         )
+    }
+
+    // 长按记录:编辑 / 删除(待同步记录只支持删除本地)
+    actionEntry?.let { target ->
+        AlertDialog(
+            onDismissRequest = { actionEntry = null },
+            title = { Text(target.detail, maxLines = 1) },
+            text = { Text(target.raw, style = MaterialTheme.typography.bodySmall) },
+            confirmButton = {
+                if (!target.pending) {
+                    TextButton(onClick = {
+                        editingEntry = target
+                        actionEntry = null
+                    }) { Text("编辑") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    actionEntry = null
+                    if (target.pending) {
+                        Outbox.remove(context, target.raw)
+                        refreshTick++
+                        snackbarMessage = "已删除"
+                    } else {
+                        onDelete(config.path, target.raw) { r ->
+                            r.onSuccess {
+                                refreshTick++
+                                snackbarMessage = "已删除"
+                            }.onFailure {
+                                snackbarMessage = "删除失败:${it.message}"
+                            }
+                        }
+                    }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+        )
+    }
+
+    if (showMonthSheet) {
+        MonthSheet(entries = entries, onDismiss = { showMonthSheet = false })
     }
 
     if (showFilterPicker) {

@@ -61,6 +61,7 @@ fun HomeHeader(
     onListAction: () -> Unit,
     onRefresh: () -> Unit,
     onSettings: () -> Unit,
+    onMonthOverview: () -> Unit,
 ) {
     // 整个头部(状态栏区+卡片+区段行)铺不透明底色,
     // 列表上划时被头部盖住,不会从卡片两侧缝隙透出来
@@ -118,6 +119,13 @@ fun HomeHeader(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false },
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("本月概览") },
+                                onClick = {
+                                    menuOpen = false
+                                    onMonthOverview()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("刷新") },
                                 onClick = {
