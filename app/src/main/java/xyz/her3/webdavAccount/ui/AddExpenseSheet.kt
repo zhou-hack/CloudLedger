@@ -77,7 +77,7 @@ fun AddExpenseSheet(
     var timeM by remember { mutableIntStateOf(now.get(Calendar.MINUTE)) }
 
     val displayFmt = remember { SimpleDateFormat("yyyy-MM-dd E", Locale.CHINA) }
-    val tokenFmt = remember { SimpleDateFormat("yyMMdd", Locale.US) }
+    val tokenFmt = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
 
     ModalBottomSheet(
         onDismissRequest = { if (!saving) onDismiss() },

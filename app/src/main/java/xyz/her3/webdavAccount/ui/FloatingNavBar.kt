@@ -1,19 +1,19 @@
 package xyz.her3.webdavAccount.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,91 +35,109 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 
-/** 悬浮底栏:圆角浮条 + 中间凸起的加号 FAB;visible=false 时整条弹性滑出 */
+/**
+ * 浮动工具栏:叠在内容上层(Box overlay),常显静态,不随滚动收起。
+ * 选中项带一圈莫奈 tonal 指示(secondaryContainer,去饱和)。
+ */
 @Composable
 fun FloatingNavBar(
-    visible: Boolean,
+    selectedTab: Int,
     onListClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAddClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val hideProgress by animateFloatAsState(
-        targetValue = if (visible) 0f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-        label = "barOffset",
-    )
-
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 12.dp)
-            .height(92.dp)
-            .offset { IntOffset(0, (hideProgress * 140.dp.roundToPx()).roundToInt()) }
+            .padding(bottom = 20.dp),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(64.dp),
-            shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 3.dp,
-            shadowElevation = 8.dp,
-        ) {
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.height(56.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 3.dp,
+                shadowElevation = 6.dp,
             ) {
-                IconButton(onClick = onListClick) {
-                    Icon(
-                        Icons.Filled.List,
-                        contentDescription = "流水",
-                        tint = MaterialTheme.colorScheme.primary,
+                Row(
+                    modifier = Modifier
+                        .width(116.dp)
+                        .height(56.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ToolbarIcon(
+                        selected = selectedTab == 0,
+                        onClick = onListClick,
+                        icon = Icons.Filled.List,
+                        description = "流水",
                     )
-                }
-                Spacer(Modifier.width(56.dp)) // 给中间 FAB 留位
-                IconButton(onClick = onSettingsClick) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = "设置",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ToolbarIcon(
+                        selected = selectedTab == 1,
+                        onClick = onSettingsClick,
+                        icon = Icons.Filled.Settings,
+                        description = "设置",
                     )
                 }
             }
-        }
+            Spacer(Modifier.width(12.dp))
 
-        val interactionSource = remember { MutableInteractionSource() }
-        val pressed by interactionSource.collectIsPressedAsState()
-        val fabScale by animateFloatAsState(
-            targetValue = if (pressed) 0.8f else 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessHigh,
-            ),
-            label = "fabScale",
-        )
-        FloatingActionButton(
-            onClick = onAddClick,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .scale(fabScale),
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-            interactionSource = interactionSource,
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = "记一笔", modifier = Modifier.size(28.dp))
+            val interactionSource = remember { MutableInteractionSource() }
+            val pressed by interactionSource.collectIsPressedAsState()
+            val fabScale by animateFloatAsState(
+                targetValue = if (pressed) 0.8f else 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessHigh,
+                ),
+                label = "fabScale",
+            )
+            FloatingActionButton(
+                onClick = onAddClick,
+                modifier = Modifier.scale(fabScale),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+                interactionSource = interactionSource,
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "记一笔", modifier = Modifier.size(28.dp))
+            }
         }
+    }
+}
+
+/** 工具栏图标:选中时带一圈 secondaryContainer 指示(莫奈 tonal,去饱和) */
+@Composable
+private fun ToolbarIcon(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector,
+    description: String,
+) {
+    val bg by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+        label = "indicator",
+    )
+    val tint by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        label = "iconTint",
+    )
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.background(bg, CircleShape),
+    ) {
+        Icon(icon, contentDescription = description, tint = tint)
     }
 }
