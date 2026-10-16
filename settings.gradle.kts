@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "webdavAccount"
+rootProject.name = "CloudLedger"
 include(":app")
