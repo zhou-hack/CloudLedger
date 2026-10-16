@@ -54,7 +54,7 @@ fun SettingsScreen(
             value = url,
             onValueChange = { url = it },
             label = { Text("服务器地址") },
-            placeholder = { Text("https://example.com:9171") },
+            placeholder = { Text("https://example.com/webdav") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -83,7 +83,7 @@ fun SettingsScreen(
             value = path,
             onValueChange = { path = it },
             label = { Text("账单文件路径") },
-            placeholder = { Text("/Obsidian/Finance/expenses.md") },
+            placeholder = { Text("/path/to/expenses.md") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
