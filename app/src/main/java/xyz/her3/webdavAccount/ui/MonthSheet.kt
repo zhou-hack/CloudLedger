@@ -29,17 +29,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import xyz.her3.webdavAccount.Entry
+import xyz.her3.webdavAccount.MonthlyReport
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-/** 月度概览:本月支出/笔数/日均 + 按天明细,可左右翻月 */
+/** 月度概览:本月支出/笔数/日均 + 余额块(来自 AI 月度文件)+ 按天明细,可左右翻月 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonthSheet(
     entries: List<Entry>,
+    reports: Map<String, MonthlyReport>,
     onDismiss: () -> Unit,
 ) {
     var monthOffset by remember { mutableIntStateOf(0) }
@@ -100,6 +102,34 @@ fun MonthSheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // 余额块(来自 AI 月度文件的"余额"一节)
+            reports[monthKey]?.let { rep ->
+                if (rep.balance != null) {
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        buildString {
+                            rep.openingBalance?.let { append("月初 ¥$it") }
+                            rep.monthExpense?.let {
+                                if (isNotEmpty()) append(" · ")
+                                append("开销 ¥$it")
+                            }
+                            rep.incomeAdded?.let {
+                                if (isNotEmpty()) append(" · ")
+                                append("新增 ¥$it")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "剩余余额 ¥${rep.balance}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
 
             Spacer(Modifier.size(12.dp))
             if (daily.isEmpty()) {

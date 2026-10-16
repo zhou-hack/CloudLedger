@@ -65,13 +65,26 @@ fun EntryCard(
                 }
             }
             Spacer(Modifier.width(14.dp))
-            Text(
-                entry.detail,
-                style = MaterialTheme.typography.bodyLarge,
+            Row(
                 modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    entry.detail,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f, fill = false),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                entry.category?.let {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             if (entry.amountText.isNotEmpty()) {
                 Spacer(Modifier.width(14.dp))
                 Text(

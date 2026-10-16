@@ -12,6 +12,7 @@ data class Entry(
     val amountText: String, // "¥14" / "+¥200" / "20 USD"
     val amountValue: Double?, // 数值金额(解析失败为 null)
     val pending: Boolean = false, // 本地待同步(离线暂存)
+    val category: String? = null, // 种类(来自 AI 月度文件,如"饮食")
 ) {
     companion object {
         // 日期 [时间] 详情 [+]货币金额;货币可省略(默认CNY)

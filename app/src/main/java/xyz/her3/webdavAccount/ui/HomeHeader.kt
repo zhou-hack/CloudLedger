@@ -51,6 +51,7 @@ fun HomeHeader(
     labelText: String,    // "今日开销" / "当日开销"(筛选时)
     amountText: String,   // "¥128.50"
     countText: String,    // "今日共 6 笔支出"
+    balanceText: String? = null, // "剩余余额 ¥1,979.78"(来自 AI 月度文件)
     hidden: Boolean,
     onToggleHidden: () -> Unit,
     onMenuClick: () -> Unit,
@@ -176,6 +177,14 @@ fun HomeHeader(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                 )
+                balanceText?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                    )
+                }
             }
         }
 

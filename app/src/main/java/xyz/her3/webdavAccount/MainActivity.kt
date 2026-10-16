@@ -68,17 +68,46 @@ class MainActivity : ComponentActivity() {
                             // 先尽力补传离线暂存,再拉远端,最后把仍未同步的拼到最前
                             Outbox.flush(this, webdav, path)
                             val remote = runCatching {
-                                webdav.get(path).lines()
+                                val entries = webdav.get(path).lines()
                                     .filter { it.isNotBlank() && !it.trimStart().startsWith("#") }
                                     .takeLast(1000)
                                     .asReversed()
                                     .map { Entry.parse(it) }
+                                // 读 AI 月度文件补分类(取记录涉及最近 3 个月)
+                                val monthlyBase = path.substringBeforeLast('/') + "/monthly"
+                                val months = entries
+                                    .map { it.dateKey.substring(0, 7) }
+                                    .filter { it.isNotBlank() }
+                                    .distinct()
+                                    .sortedDescending()
+                                    .take(3)
+                                val reports = months.mapNotNull { m ->
+                                    runCatching { webdav.get("$monthlyBase/$m.md") }
+                                        .getOrNull()
+                                        ?.let { m to MonthlyReport.parse(it, m) }
+                                }.toMap()
+                                val categorized = entries.map { e ->
+                                    val cat = e.amountValue?.let { v ->
+                                        reports[e.dateKey.substring(0, 7)]
+                                            ?.categories
+                                            ?.get(MonthlyReport.keyOf(e.dateKey, e.detail, v))
+                                    }
+                                    if (cat != null && cat != e.category) {
+                                        e.copy(category = cat)
+                                    } else {
+                                        e
+                                    }
+                                }
+                                categorized to reports
                             }
                             val pending = Outbox.pending(this)
                                 .map { Entry.parse(it).copy(pending = true) }
                             when {
-                                remote.isSuccess -> onDone(Result.success(pending + remote.getOrThrow()))
-                                pending.isNotEmpty() -> onDone(Result.success(pending))
+                                remote.isSuccess -> {
+                                    val (list, reports) = remote.getOrThrow()
+                                    onDone(Result.success((pending + list) to reports))
+                                }
+                                pending.isNotEmpty() -> onDone(Result.success(pending to emptyMap()))
                                 else -> onDone(Result.failure(remote.exceptionOrNull()!!))
                             }
                         }.start()
@@ -129,12 +158,13 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     config: WebdavConfig,
     onConfigSave: (WebdavConfig) -> Unit,
-    onLoadRecent: (path: String, limit: Int, onDone: (Result<List<Entry>>) -> Unit) -> Unit,
+    onLoadRecent: (path: String, limit: Int, onDone: (Result<Pair<List<Entry>, Map<String, MonthlyReport>>>) -> Unit) -> Unit,
     onSave: (path: String, line: String, dateToken: String, onDone: (Result<Boolean>) -> Unit) -> Unit,
     onReplace: (path: String, oldRaw: String, newLine: String, dateToken: String, onDone: (Result<Unit>) -> Unit) -> Unit,
     onDelete: (path: String, raw: String, onDone: (Result<Unit>) -> Unit) -> Unit,
 ) {
     var entries by remember { mutableStateOf<List<Entry>>(emptyList()) }
+    var monthReports by remember { mutableStateOf<Map<String, MonthlyReport>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var showSheet by remember { mutableStateOf(false) }
@@ -168,7 +198,10 @@ fun MainScreen(
         onLoadRecent(config.path, 1000) { result ->
             loading = false
             result
-                .onSuccess { entries = it }
+                .onSuccess { (list, reports) ->
+                    entries = list
+                    monthReports = reports
+                }
                 .onFailure { loadError = it.message ?: "网络错误" }
         }
     }
@@ -204,6 +237,8 @@ fun MainScreen(
             "${it.substring(5, 7).toInt()}月${it.substring(8, 10).toInt()}日 的账单"
         }
     }
+    // 剩余余额:来自当月 AI 月度文件
+    val balanceText = monthReports[todayToken.substring(0, 7)]?.balance?.let { "剩余余额 ¥$it" }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -214,6 +249,7 @@ fun MainScreen(
                     labelText = if (isOtherDay) "当日开销" else "今日开销",
                     amountText = amountText,
                     countText = countText,
+                    balanceText = balanceText,
                     hidden = hideAmount,
                     onToggleHidden = { hideAmount = !hideAmount },
                     onMenuClick = { snackbarMessage = "菜单还没做" },
@@ -383,7 +419,11 @@ fun MainScreen(
     }
 
     if (showMonthSheet) {
-        MonthSheet(entries = entries, onDismiss = { showMonthSheet = false })
+        MonthSheet(
+            entries = entries,
+            reports = monthReports,
+            onDismiss = { showMonthSheet = false },
+        )
     }
 
     if (showFilterPicker) {
